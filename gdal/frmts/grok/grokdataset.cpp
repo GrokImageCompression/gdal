@@ -167,6 +167,7 @@ class JP2GrokDataset final: public GDALJP2AbstractDataset
 {
     friend class JP2GrokRasterBand;
 
+    std::string  m_osFilename;
     VSILFILE   *fp = nullptr; /* Large FILE API */
     vsi_l_offset nCodeStreamStart = 0;
     vsi_l_offset nCodeStreamLength = 0;
@@ -485,10 +486,10 @@ void JP2GrokDataset::JP2GrokReadBlockInThread(void* userdata)
     int nPairs = (int)poJob->oPairs.size();
     int nBandCount = poJob->nBandCount;
     int* panBandMap = poJob->panBandMap;
-    VSILFILE* fp = VSIFOpenL(poGDS->GetDescription(), "rb");
+    VSILFILE* fp = VSIFOpenL(poGDS->m_osFilename.c_str(), "rb");
     if( fp == nullptr )
     {
-        CPLDebug("GROK", "Cannot open %s", poGDS->GetDescription());
+        CPLDebug("GROK", "Cannot open %s", poGDS->m_osFilename.c_str());
         poJob->bSuccess = false;
         return;
     }
@@ -1826,6 +1827,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
     int                 iBand;
 
     poDS = new JP2GrokDataset();
+    poDS->m_osFilename = poOpenInfo->pszFilename;
     if( eCodecFormat == GRK_CODEC_JP2 )
         poDS->eAccess = poOpenInfo->eAccess;
     poDS->eColorSpace = psImage->color_space;
@@ -2140,6 +2142,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
                     poDS->papoOverviewDS,
                     (poDS->nOverviewCount + 1) * sizeof(JP2GrokDataset*));
         JP2GrokDataset* poODS = new JP2GrokDataset();
+        poODS->m_osFilename = poDS->m_osFilename;
         poODS->nParentXSize = poDS->nRasterXSize;
         poODS->nParentYSize = poDS->nRasterYSize;
         poODS->SetDescription( poOpenInfo->pszFilename );
