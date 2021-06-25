@@ -2455,7 +2455,8 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
 
     // By default do not generate tile sizes larger than the dataset
     // dimensions
-    if( !CPLFetchBool(papszOptions, "BLOCKSIZE_STRICT", false) )
+    if( !CPLFetchBool(papszOptions, "BLOCKSIZE_STRICT", false) &&
+        !CPLFetchBool(papszOptions, "@BLOCKSIZE_STRICT", false) )
     {
         if (nBlockXSize < 32 || nBlockYSize < 32)
         {
