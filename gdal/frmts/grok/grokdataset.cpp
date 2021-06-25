@@ -1099,10 +1099,13 @@ end:
 
 int JP2GrokRasterBand::GetOverviewCount()
 {
+    auto poGDS = cpl::down_cast<JP2GrokDataset*>(poDS);
+    if( !poGDS->AreOverviewsEnabled() )
+        return 0;
+
     if( GDALPamRasterBand::GetOverviewCount() > 0 )
         return GDALPamRasterBand::GetOverviewCount();
 
-    JP2GrokDataset *poGDS = (JP2GrokDataset *) poDS;
     return poGDS->nOverviewCount;
 }
 
