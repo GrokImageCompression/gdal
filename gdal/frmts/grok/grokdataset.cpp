@@ -217,19 +217,12 @@ class JP2GrokDataset final: public GDALJP2AbstractDataset
                                            GDALProgressFunc pfnProgress,
                                            void * pProgressData );
 
-    virtual CPLErr _SetProjection( const char * ) override;
-    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override {
-        return OldSetProjectionFromSetSpatialRef(poSRS);
-    }
+    CPLErr SetSpatialRef(const OGRSpatialReference* poSRS) override;
 
     virtual CPLErr SetGeoTransform( double* ) override;
-    virtual CPLErr _SetGCPs( int nGCPCount, const GDAL_GCP *pasGCPList,
-                            const char *pszGCPProjection ) override;
-    using GDALJP2AbstractDataset::SetGCPs;
+
     CPLErr SetGCPs( int nGCPCountIn, const GDAL_GCP *pasGCPListIn,
-                    const OGRSpatialReference* poSRS ) override {
-        return OldSetGCPsFromNew(nGCPCountIn, pasGCPListIn, poSRS);
-    }
+                    const OGRSpatialReference* poSRS ) override ;
 
     virtual CPLErr      SetMetadata( char ** papszMetadata,
                              const char * pszDomain = "" ) override;
@@ -1281,7 +1274,7 @@ JP2GrokDataset::~JP2GrokDataset()
 
             const char* pszGMLJP2;
             int bGeoreferencingCompatOfGMLJP2 =
-                       ((pszProjection != nullptr && pszProjection[0] != '\0' ) &&
+                    (!m_oSRS.IsEmpty() &&
                         bGeoTransformValid && nGCPCount == 0);
             if( bGeoreferencingCompatOfGMLJP2 &&
                 ((bHasGeoreferencingAtOpening && bGMLData) ||
@@ -1292,7 +1285,7 @@ JP2GrokDataset::~JP2GrokDataset()
 
             const char* pszGeoJP2;
             int bGeoreferencingCompatOfGeoJP2 =
-                    ((pszProjection != nullptr && pszProjection[0] != '\0' ) ||
+                    (!m_oSRS.IsEmpty() ||
                     nGCPCount != 0 || bGeoTransformValid);
             if( bGeoreferencingCompatOfGeoJP2 &&
                 ((bHasGeoreferencingAtOpening && bMSIBox) ||
@@ -1353,14 +1346,14 @@ JP2GrokDataset::~JP2GrokDataset()
                 {
                     oJP2MD.SetGCPs( GetGCPCount(),
                                     GetGCPs() );
-                    oJP2MD.SetProjection( GetGCPProjection() );
+                    oJP2MD.SetSpatialRef( GetGCPSpatialRef() );
                 }
                 else
                 {
-                    const char* pszWKT = GetProjectionRef();
-                    if( pszWKT != nullptr && pszWKT[0] != '\0' )
+                    const OGRSpatialReference* poSRS = GetSpatialRef();
+                    if( poSRS != nullptr )
                     {
-                        oJP2MD.SetProjection( pszWKT );
+                        oJP2MD.SetSpatialRef( poSRS );
                     }
                     if( bGeoTransformValid )
                     {
@@ -1447,20 +1440,21 @@ int JP2GrokDataset::CloseDependentDatasets()
 }
 
 /************************************************************************/
-/*                           SetProjection()                            */
+/*                           SetSpatialRef()                            */
 /************************************************************************/
 
-CPLErr JP2GrokDataset::_SetProjection( const char * pszProjectionIn )
+CPLErr JP2GrokDataset::SetSpatialRef( const OGRSpatialReference * poSRS )
 {
     if( eAccess == GA_Update )
     {
         bRewrite = TRUE;
-        CPLFree(pszProjection);
-        pszProjection = (pszProjectionIn) ? CPLStrdup(pszProjectionIn) : CPLStrdup("");
+        m_oSRS.Clear();
+        if( poSRS )
+            m_oSRS = *poSRS;
         return CE_None;
     }
     else
-        return GDALJP2AbstractDataset::_SetProjection(pszProjectionIn);
+        return GDALJP2AbstractDataset::SetSpatialRef(poSRS);
 }
 
 /************************************************************************/
@@ -1487,28 +1481,30 @@ CPLErr JP2GrokDataset::SetGeoTransform( double *padfGeoTransform )
 /*                           SetGCPs()                                  */
 /************************************************************************/
 
-CPLErr JP2GrokDataset::_SetGCPs( int nGCPCountIn, const GDAL_GCP *pasGCPListIn,
-                                    const char *pszGCPProjectionIn )
+CPLErr JP2GrokDataset::SetGCPs( int nGCPCountIn, const GDAL_GCP *pasGCPListIn,
+                                    const OGRSpatialReference* poSRS )
 {
     if( eAccess == GA_Update )
     {
         bRewrite = TRUE;
-        CPLFree( pszProjection );
         if( nGCPCount > 0 )
         {
             GDALDeinitGCPs( nGCPCount, pasGCPList );
             CPLFree( pasGCPList );
         }
 
-        pszProjection = (pszGCPProjectionIn) ? CPLStrdup(pszGCPProjectionIn) : CPLStrdup("");
+        m_oSRS.Clear();
+        if( poSRS )
+            m_oSRS = *poSRS;
+
         nGCPCount = nGCPCountIn;
         pasGCPList = GDALDuplicateGCPs( nGCPCount, pasGCPListIn );
 
         return CE_None;
     }
     else
-        return GDALJP2AbstractDataset::_SetGCPs(nGCPCountIn, pasGCPListIn,
-                                               pszGCPProjectionIn);
+        return GDALJP2AbstractDataset::SetGCPs(nGCPCountIn, pasGCPListIn,
+                                               poSRS);
 }
 
 /************************************************************************/
@@ -2236,7 +2232,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
     poOpenInfo->fpL = nullptr;
 
     poDS->bHasGeoreferencingAtOpening =
-        ((poDS->pszProjection != nullptr && poDS->pszProjection[0] != '\0' )||
+            (!poDS->m_oSRS.IsEmpty()||
          poDS->nGCPCount != 0 || poDS->bGeoTransformValid);
 
 /* -------------------------------------------------------------------- */
@@ -2811,15 +2807,15 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
             bGeoreferencingCompatOfGeoJP2 = TRUE;
             oJP2MD.SetGCPs( poSrcDS->GetGCPCount(),
                             poSrcDS->GetGCPs() );
-            oJP2MD.SetProjection( poSrcDS->GetGCPProjection() );
+            oJP2MD.SetSpatialRef( poSrcDS->GetGCPSpatialRef() );
         }
         else
         {
-            const char* pszWKT = poSrcDS->GetProjectionRef();
-            if( pszWKT != nullptr && pszWKT[0] != '\0' )
+            const OGRSpatialReference* poSRS = poSrcDS->GetSpatialRef();
+            if( poSRS != nullptr )
             {
                 bGeoreferencingCompatOfGeoJP2 = TRUE;
-                oJP2MD.SetProjection( pszWKT );
+                oJP2MD.SetSpatialRef( poSRS );
             }
             double adfGeoTransform[6];
             if( poSrcDS->GetGeoTransform( adfGeoTransform ) == CE_None )
@@ -2828,7 +2824,7 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
                 oJP2MD.SetGeoTransform( adfGeoTransform );
             }
             bGeoreferencingCompatOfGMLJP2 =
-                        ( pszWKT != nullptr && pszWKT[0] != '\0' ) &&
+                          poSRS != nullptr && !poSRS->IsEmpty() &&
                           poSrcDS->GetGeoTransform( adfGeoTransform ) == CE_None;
         }
         if( poSrcDS->GetMetadata("RPC") != nullptr )
@@ -2988,11 +2984,10 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
                 poDS->SetGeoTransform( adfGeoTransform );
             }
 
-            const char* pszWKT = poSrcDS->GetProjectionRef();
-
-            if( pszWKT != nullptr && pszWKT[0] != '\0' )
+            const OGRSpatialReference* poSRS = poSrcDS->GetSpatialRef();
+            if( poSRS )
             {
-                poDS->SetProjection( pszWKT );
+                poDS->SetSpatialRef( poSRS );
             }
 
             delete poGMLJP2Box;
