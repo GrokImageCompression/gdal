@@ -416,7 +416,7 @@ CPLErr JP2GrokRasterBand::IRasterIO( GDALRWFlag eRWFlag,
 /*      this request?                                                   */
 /* ==================================================================== */
     if( (nBufXSize < nXSize || nBufYSize < nYSize)
-        && GetOverviewCount() > 0 && eRWFlag == GF_Read )
+        && GetOverviewCount() > 0 )
     {
         int bTried;
         CPLErr eErr = TryOverviewRasterIO( eRWFlag,
@@ -669,7 +669,7 @@ CPLErr  JP2GrokDataset::IRasterIO( GDALRWFlag eRWFlag,
 /* ==================================================================== */
 
     if( (nBufXSize < nXSize || nBufYSize < nYSize)
-        && poBand->GetOverviewCount() > 0 && eRWFlag == GF_Read )
+        && poBand->GetOverviewCount() > 0 )
     {
         int bTried;
         CPLErr eErr = TryOverviewRasterIO( eRWFlag,
