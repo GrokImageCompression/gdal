@@ -2899,7 +2899,8 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
             "BLOCKXSIZE", "BLOCKYSIZE", "QUALITY", "REVERSIBLE",
             "RESOLUTIONS", "PROGRESSION", "SOP", "EPH",
             "YCBCR420", "YCC", "NBITS", "1BIT_ALPHA", "PRECINCTS",
-            "TILEPARTS", "CODEBLOCK_WIDTH", "CODEBLOCK_HEIGHT", "PLT", nullptr };
+            "TILEPARTS", "CODEBLOCK_WIDTH", "CODEBLOCK_HEIGHT", "PLT",
+            "TLM", nullptr };
 
         for( int i = 0; apszIgnoredOptions[i]; i ++)
         {
@@ -3280,6 +3281,10 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
         parameters.writePLT = true;
     }
 
+    if( CPLTestBool(CSLFetchNameValueDef(papszOptions, "TLM", "FALSE")) )
+    {
+        parameters.writeTLM = true;
+    }
 
 /* -------------------------------------------------------------------- */
 /*      Create the dataset.                                             */
