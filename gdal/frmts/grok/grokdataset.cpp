@@ -855,7 +855,6 @@ CPLErr JP2GrokDataset::ReadBlock( int nBand, VSILFILE* fpIn,
         if(!grk_decompress_read_header(pCodec,NULL))
         {
             CPLError(CE_Failure, CPLE_AppDefined, "grk_read_header() failed (psImage=%p)", psImage);
-            // Hopefully the situation is better on openjpeg 2.2 regarding cleanup
             eErr = CE_Failure;
             goto end;
         }
@@ -1042,24 +1041,12 @@ CPLErr JP2GrokDataset::ReadBlock( int nBand, VSILFILE* fpIn,
                     }
                 }
             }
-            //note: we can't do block copy because of stride
-/*
-            if ((int)psImage->comps[iBand-1].w == nBlockXSize &&
-                (int)psImage->comps[iBand-1].h == nBlockYSize)
+            for(GPtrDiff_t j=0;j<nHeightToRead;j++)
             {
-                GDALCopyWords64(psImage->comps[iBand-1].data, GDT_Int32, 4,
-                            pDstBuffer, eDataType, nDataTypeSize, static_cast<GPtrDiff_t>(nBlockXSize) * nBlockYSize);
+                GDALCopyWords(psImage->comps[iBand-1].data + j * psImage->comps[iBand-1].stride, GDT_Int32, 4,
+                            (GByte*)pDstBuffer + j * nBlockXSize * nDataTypeSize, eDataType, nDataTypeSize,
+                            nWidthToRead);
             }
-            else
-            {
-            */
-                for(GPtrDiff_t j=0;j<nHeightToRead;j++)
-                {
-                    GDALCopyWords(psImage->comps[iBand-1].data + j * psImage->comps[iBand-1].stride, GDT_Int32, 4,
-                                (GByte*)pDstBuffer + j * nBlockXSize * nDataTypeSize, eDataType, nDataTypeSize,
-                                nWidthToRead);
-                }
-            //}
         }
 
         if (poBlock != nullptr)
@@ -1971,7 +1958,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
                                 CPLFree(pabyCT);
                             }
                         }
-                        /* There's a bug/misfeature in openjpeg: the color_space
+                        /* There's a bug/misfeature in Grok: the color_space
                            only gets set at read tile time */
                         else if( EQUAL(oSubBox.GetType(),"colr") &&
                                  nDataLength == 7 )
@@ -2095,7 +2082,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
             psImage->comps[poDS->nAlphaIndex ].prec == 1 &&
             CPLFetchBool(
                 poOpenInfo->papszOpenOptions, "1BIT_ALPHA_PROMOTION",
-                CPLTestBool(CPLGetConfigOption("JP2OPENJPEG_PROMOTE_1BIT_ALPHA_AS_8BIT", "YES")));
+                CPLTestBool(CPLGetConfigOption("JP2GROK_PROMOTE_1BIT_ALPHA_AS_8BIT", "YES")));
         if( bPromoteTo8Bit )
             CPLDebug("JP2Grok", "Alpha band is promoted from 1 bit to 8 bit");
 
@@ -2195,7 +2182,7 @@ GDALDataset *JP2GrokDataset::Open( GDALOpenInfo * poOpenInfo )
                 psImage->comps[poDS->nAlphaIndex].prec == 1 &&
                 CPLFetchBool(
                     poOpenInfo->papszOpenOptions, "1BIT_ALPHA_PROMOTION",
-                    CPLTestBool(CPLGetConfigOption("JP2OPENJPEG_PROMOTE_1BIT_ALPHA_AS_8BIT", "YES")));
+                    CPLTestBool(CPLGetConfigOption("JP2GROK_PROMOTE_1BIT_ALPHA_AS_8BIT", "YES")));
 
             poODS->SetBand( iBand, new JP2GrokRasterBand( poODS, iBand, eDataType,
                                                               bPromoteTo8Bit ? 8: psImage->comps[iBand-1].prec,
@@ -3172,7 +3159,7 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
         {
             if( iBand != nBands - 1 && nBits != 1 )
             {
-                /* Might be a bug in openjpeg, but it seems that if the alpha */
+                /* Might be a bug in Grok, but it seems that if the alpha */
                 /* band is the first one, it would select 1-bit for all channels... */
                 CPLError(CE_Warning, CPLE_NotSupported,
                          "Cannot output 1-bit alpha channel if it is not the last one");
@@ -3760,7 +3747,7 @@ GDALDataset * JP2GrokDataset::CreateCopy( const char * pszFilename,
             (nTilesX > 1 || nTilesY > 1) &&
             nTileSize < 10 * 1024 * 1024 &&
             strcmp(CPLGetThreadingModel(), "stub") != 0 &&
-            CPLTestBool(CPLGetConfigOption("JP2OPENJPEG_USE_THREADED_IO", "YES"));
+            CPLTestBool(CPLGetConfigOption("JP2GROK_USE_THREADED_IO", "YES"));
 
         if( nTileSize > UINT_MAX )
         {
@@ -4154,7 +4141,7 @@ void GDALRegister_JP2Grok()
     poDriver->SetMetadataItem( GDAL_DCAP_VECTOR, "YES" );
     poDriver->SetMetadataItem( GDAL_DMD_LONGNAME,
                                "JPEG-2000 driver based on Grok library" );
-    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drivers/raster/jp2openjpeg.html" );
+    poDriver->SetMetadataItem( GDAL_DMD_HELPTOPIC, "drivers/raster/jp2grok.html" );
     poDriver->SetMetadataItem( GDAL_DMD_MIMETYPE, "image/jp2" );
     poDriver->SetMetadataItem( GDAL_DMD_EXTENSION, "jp2" );
     poDriver->SetMetadataItem( GDAL_DMD_EXTENSIONS, "jp2 j2k" );
