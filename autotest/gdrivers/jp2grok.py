@@ -1351,6 +1351,45 @@ def test_jp2grok_transcode_ignored_options(tmp_path):
 
 
 ###############################################################################
+# Test reading a remote JP2 via /vsicurl/ (handled natively by Grok's libcurl
+# backend when available).  Uses a real URL, so it is only run when slow
+# tests are enabled.
+
+
+def test_jp2grok_vsicurl_remote():
+
+    if not gdaltest.run_slow_tests():
+        pytest.skip("GDAL_RUN_SLOW_TESTS not set")
+    if "CURL_ENABLED=YES" not in gdal.VersionInfo("BUILD_INFO"):
+        pytest.skip("curl not enabled in this GDAL build")
+
+    url = (
+        "/vsicurl/https://www.opengeodata.nrw.de/produkte/geobasis/lusat/"
+        "akt/dop/dop_jp2_f10/dop10rgbi_32_280_5653_1_nw_2025.jp2"
+    )
+
+    gdal.VSICurlClearCache()
+    try:
+        ds = gdal.Open(url)
+        if ds is None:
+            pytest.skip("remote host unreachable: " + gdal.GetLastErrorMsg())
+        assert ds.RasterXSize > 0
+        assert ds.RasterYSize > 0
+        assert ds.RasterCount >= 1
+        # Read a small window from an overview (if any) or from the full-res
+        # upper-left corner to exercise the fetch path without pulling
+        # too much data.
+        band = ds.GetRasterBand(1)
+        w = min(64, ds.RasterXSize)
+        h = min(64, ds.RasterYSize)
+        data = band.ReadRaster(0, 0, w, h, w, h)
+        assert data is not None and len(data) > 0
+        ds = None
+    finally:
+        gdal.VSICurlClearCache()
+
+
+###############################################################################
 # Test driver metadata
 
 

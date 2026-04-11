@@ -109,6 +109,113 @@ template <size_t N> void safe_strcpy(char (&dest)[N], const std::string &src)
     dest[len] = '\0';
 }
 
+#if defined(HAVE_CURL) && defined(GRK_HAS_LIBCURL)
+
+/**
+ * @brief True if @p filename is a network path handled natively by Grok.
+ *
+ * Both /vsis3/ and /vsicurl/ are fetched via libcurl inside Grok; /vsis3/
+ * needs AWS credentials resolved by GDAL, /vsicurl/ only needs the shared
+ * HTTP auth options (.netrc, cookies, allow-insecure).
+ */
+static bool isGrokNetworkPath(const char *filename)
+{
+    return strncmp(filename, "/vsis3/", 7) == 0 ||
+           strncmp(filename, "/vsicurl/", 9) == 0;
+}
+
+/**
+ * @brief Forward GDAL's shared HTTP auth config options to grk_stream_params.
+ *
+ * These options apply to any network transport (both /vsis3/ and /vsicurl/),
+ * so they are set exactly once on the shared path
+ *   - GDAL_HTTP_UNSAFESSL    -> s3_allow_insecure
+ *   - GDAL_HTTP_NETRC        -> netrc   (default YES, matching GDAL)
+ *   - GDAL_HTTP_NETRC_FILE   -> netrc_file
+ *   - GDAL_HTTP_COOKIE       -> cookie
+ *   - GDAL_HTTP_COOKIEFILE   -> cookie_file
+ *   - GDAL_HTTP_COOKIEJAR    -> cookie_jar
+ *   - GDAL_HTTP_USERPWD      -> username / password
+ *   - GDAL_HTTP_BEARER       -> bearer_token
+ *   - GDAL_HTTP_PROXY        -> proxy
+ *   - GDAL_HTTP_PROXYUSERPWD -> proxy_userpwd
+ *   - GDAL_HTTP_USERAGENT    -> user_agent
+ *   - GDAL_HTTP_TIMEOUT      -> timeout
+ *   - GDAL_HTTP_CONNECTTIMEOUT -> connect_timeout
+ *   - GDAL_HTTP_MAX_RETRY    -> max_retry
+ *   - GDAL_HTTP_RETRY_DELAY  -> retry_delay
+ */
+static void forwardSharedHttpAuth(grk_stream_params &streamParams)
+{
+    streamParams.s3_allow_insecure =
+        CPLTestBool(CPLGetConfigOption("GDAL_HTTP_UNSAFESSL", "NO"));
+
+    streamParams.netrc =
+        CPLTestBool(CPLGetConfigOption("GDAL_HTTP_NETRC", "YES"));
+    if (const char *pszNetrcFile =
+            CPLGetConfigOption("GDAL_HTTP_NETRC_FILE", nullptr))
+        safe_strcpy(streamParams.netrc_file, pszNetrcFile);
+
+    if (const char *pszCookie = CPLGetConfigOption("GDAL_HTTP_COOKIE", nullptr))
+        safe_strcpy(streamParams.cookie, pszCookie);
+    if (const char *pszCookieFile =
+            CPLGetConfigOption("GDAL_HTTP_COOKIEFILE", nullptr))
+        safe_strcpy(streamParams.cookie_file, pszCookieFile);
+    if (const char *pszCookieJar =
+            CPLGetConfigOption("GDAL_HTTP_COOKIEJAR", nullptr))
+        safe_strcpy(streamParams.cookie_jar, pszCookieJar);
+
+    // HTTP basic auth (user:password)
+    if (const char *pszUserPwd =
+            CPLGetConfigOption("GDAL_HTTP_USERPWD", nullptr))
+    {
+        const std::string osUserPwd(pszUserPwd);
+        const size_t nColon = osUserPwd.find(':');
+        if (nColon != std::string::npos)
+        {
+            safe_strcpy(streamParams.username, osUserPwd.substr(0, nColon));
+            safe_strcpy(streamParams.password, osUserPwd.substr(nColon + 1));
+        }
+    }
+
+    // Bearer token for HTTP(S) endpoints
+    if (const char *pszBearer = CPLGetConfigOption("GDAL_HTTP_BEARER", nullptr))
+        safe_strcpy(streamParams.bearer_token, pszBearer);
+
+    // Proxy
+    if (const char *pszProxy = CPLGetConfigOption("GDAL_HTTP_PROXY", nullptr))
+        safe_strcpy(streamParams.proxy, pszProxy);
+    if (const char *pszProxyUserPwd =
+            CPLGetConfigOption("GDAL_HTTP_PROXYUSERPWD", nullptr))
+        safe_strcpy(streamParams.proxy_userpwd, pszProxyUserPwd);
+
+    // User agent
+    if (const char *pszUserAgent =
+            CPLGetConfigOption("GDAL_HTTP_USERAGENT", nullptr))
+        safe_strcpy(streamParams.user_agent, pszUserAgent);
+
+    // Timeouts
+    const char *pszTimeout = CPLGetConfigOption("GDAL_HTTP_TIMEOUT", nullptr);
+    if (pszTimeout)
+        streamParams.timeout = atol(pszTimeout);
+    const char *pszConnectTimeout =
+        CPLGetConfigOption("GDAL_HTTP_CONNECTTIMEOUT", nullptr);
+    if (pszConnectTimeout)
+        streamParams.connect_timeout = atol(pszConnectTimeout);
+
+    // Retry configuration
+    const char *pszMaxRetry =
+        CPLGetConfigOption("GDAL_HTTP_MAX_RETRY", nullptr);
+    if (pszMaxRetry)
+        streamParams.max_retry = static_cast<uint32_t>(atol(pszMaxRetry));
+    const char *pszRetryDelay =
+        CPLGetConfigOption("GDAL_HTTP_RETRY_DELAY", nullptr);
+    if (pszRetryDelay)
+        streamParams.retry_delay = static_cast<uint32_t>(atol(pszRetryDelay));
+}
+
+#endif  // HAVE_CURL && GRK_HAS_LIBCURL
+
 /************************************************************************/
 /*                            GrokCanRead()                             */
 /************************************************************************/
@@ -128,10 +235,12 @@ static bool GrokCanRead(const char *filename)
         return false;
 
 #if defined(HAVE_CURL) && defined(GRK_HAS_LIBCURL)
-    // Cloud storage: Grok handles S3 fetching natively via libcurl.
-    // GDAL resolves AWS credentials and passes them to Grok via
-    // grk_stream_params (username/password/bearer_token/region).
-    if (strncmp(filename, "/vsis3/", 7) == 0)
+    // Cloud storage: Grok handles fetching natively via libcurl.
+    // For /vsis3/, GDAL resolves AWS credentials and passes them to Grok
+    // via grk_stream_params.  For /vsicurl/, Grok's HTTPFetcher strips the
+    // prefix and issues HTTP(S) range requests directly, honoring the
+    // shared .netrc/cookie options forwarded from GDAL.
+    if (isGrokNetworkPath(filename))
         return true;
 #endif
 
@@ -225,7 +334,7 @@ static void JP2_DebugCallback(const char *pszMsg, CPL_UNUSED void *unused)
 /**
  * @brief VSILFILE write callback for Grok stream I/O.
  *
- * Used when GrokCanRead() returns false (e.g. /vsimem/, /vsicurl/).
+ * Used when GrokCanRead() returns false (e.g. /vsimem/, /vsitar/).
  * Also always used for compression output.
  */
 static size_t JP2Dataset_Write(const uint8_t *pBuffer, size_t nBytes,
@@ -538,9 +647,21 @@ struct GRKCodecWrapper
             safe_strcpy(streamParams.file, pszFilename);
             streamParams.initial_offset = psJP2File->nBaseOffset;
 #if defined(HAVE_CURL) && defined(GRK_HAS_LIBCURL)
+            // Shared HTTP auth options (.netrc, cookies, allow-insecure)
+            // apply to both /vsis3/ and /vsicurl/ and are set exactly once
+            // here so the S3-specific branch below does not duplicate them.
+            if (isGrokNetworkPath(pszFilename))
+                forwardSharedHttpAuth(streamParams);
+
             // For /vsis3/ paths, resolve AWS credentials through GDAL's
             // full authentication chain and pass them to Grok so it can
-            // handle S3 fetching natively via libcurl.
+            // handle S3 fetching natively via libcurl.  For /vsicurl/,
+            // Grok's HTTPFetcher strips the prefix and honors the shared
+            // HTTP auth options forwarded above.
+            //
+            // S3 credentials override the generic USERPWD / BEARER values
+            // set by forwardSharedHttpAuth, since the S3 signer requires
+            // the access-key / secret / session-token triple.
             if (strncmp(pszFilename, "/vsis3/", 7) == 0)
             {
                 auto poHelper = std::unique_ptr<VSIS3HandleHelper>(
@@ -572,8 +693,13 @@ struct GRKCodecWrapper
                     streamParams.s3_no_sign_request =
                         poHelper->GetCredentialsSource() ==
                         AWSCredentialsSource::NO_SIGN_REQUEST;
-                    streamParams.s3_allow_insecure = CPLTestBool(
-                        CPLGetConfigOption("GDAL_HTTP_UNSAFESSL", "NO"));
+
+                    // Requester pays
+                    const char *pszRequestPayer = VSIGetPathSpecificOption(
+                        pszFilename, "AWS_REQUEST_PAYER", "");
+                    if (pszRequestPayer[0])
+                        safe_strcpy(streamParams.request_payer,
+                                    pszRequestPayer);
                 }
                 else
                 {
@@ -1330,6 +1456,7 @@ struct GRKCodecWrapper
      *
      * For local files and /vsis3/, uses native file I/O (closing the
      * VSILFILE).  For other VSI paths, uses VSILFILE callbacks.
+     * (/vsicurl/ is read-only so it never reaches the compression path.)
      */
     bool initCodec(const char *pszFilename, VSIVirtualHandleUniquePtr &fpOwner)
     {
