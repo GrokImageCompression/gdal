@@ -318,6 +318,7 @@ OGRErr OGRGeoPackageTableLayer::FeatureBindParameters(
             poFeatureDefn->GetFieldDefnUnsafe(iField);
         int err = SQLITE_OK;
         bool bBound = false;
+        char *pszValToFree = nullptr;
 
         if (!poFeature->IsFieldNullUnsafe(iField))
         {
@@ -473,7 +474,9 @@ OGRErr OGRGeoPackageTableLayer::FeatureBindParameters(
                                              : "");
                                 if (m_bTruncateFields)
                                 {
-                                    pszVal = CPLForceToASCII(pszVal, -1, '_');
+                                    pszValToFree =
+                                        CPLForceToASCII(pszVal, -1, '_');
+                                    pszVal = pszValToFree;
                                     destructorType = CPLFree;
                                 }
                             }
@@ -542,12 +545,6 @@ OGRErr OGRGeoPackageTableLayer::FeatureBindParameters(
                                 // Escape and quote
                                 osValue = CPLJSONObject(pszVal).Format(
                                     CPLJSONObject::PrettyFormat::Plain);
-                                if (nValLengthBytes > 0)
-                                {
-                                    nValLengthBytes +=
-                                        static_cast<int>(osValue.length()) -
-                                        static_cast<int>(strlen(pszVal));
-                                }
                             }
                             else
                             {
@@ -555,9 +552,16 @@ OGRErr OGRGeoPackageTableLayer::FeatureBindParameters(
                             }
                             err = sqlite3_bind_text(
                                 poStmt, nColCount++, osValue.c_str(),
-                                nValLengthBytes, SQLITE_TRANSIENT);
+                                static_cast<int>(osValue.size()),
+                                SQLITE_TRANSIENT);
                             bBound = true;
                             json_object_put(poObjProp);
+                            CPLFree(pszValToFree);
+                            pszValToFree = nullptr;
+                            CPL_IGNORE_RET_VAL(pszValToFree);
+                            destructorType = SQLITE_TRANSIENT;
+                            pszVal = "";
+                            nValLengthBytes = 0;
                         }
                     }
                     else
