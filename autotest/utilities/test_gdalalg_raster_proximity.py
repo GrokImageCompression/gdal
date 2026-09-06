@@ -26,7 +26,8 @@ def get_alg():
 
 @pytest.fixture(scope="module", autouse=True)
 def set_cpl_tmpdir(tmp_path_factory):
-    yield gdaltest.set_cpl_tmpdir(tmp_path_factory, "test_gdalalg_raster_proximity")
+    with gdaltest.set_cpl_tmpdir(tmp_path_factory, "test_gdalalg_raster_proximity"):
+        yield
 
 
 # Helper function to create a GTiff raster from a numpy array
