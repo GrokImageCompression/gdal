@@ -514,10 +514,6 @@ bool OGRShapeDataSource::OpenFile(const char *pszNewName, bool bUpdate)
             }
         }
     }
-    else
-    {
-        hDBF = nullptr;
-    }
 
     if (hDBF == nullptr && hSHP == nullptr)
         return false;
