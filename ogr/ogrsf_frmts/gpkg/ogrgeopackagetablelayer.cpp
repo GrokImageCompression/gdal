@@ -4450,7 +4450,7 @@ void OGRGeoPackageTableLayer::RecomputeExtent()
 /*                           TestCapability()                           */
 /************************************************************************/
 
-int OGRGeoPackageTableLayer::TestCapability(const char *pszCap) const
+bool OGRGeoPackageTableLayer::TestCapability(const char *pszCap) const
 {
     if (!m_bFeatureDefnCompleted)
         GetLayerDefn();
