@@ -7449,13 +7449,17 @@ OGRErr OGRLayer::Update(OGRLayer *pLayerMethod, OGRLayer *pLayerResult,
             progress_counter += 1.0;
         }
 
-        OGRGeometry *y_geom = y->StealGeometry();
+        std::unique_ptr<OGRGeometry> y_geom(y->StealGeometry());
+        if (!y_geom)
+            continue;
+        y_geom = convert_geometry(std::move(y_geom), bPromoteToMulti,
+                                  eOutputGeometryType);
         if (!y_geom)
             continue;
         OGRFeatureUniquePtr z(new OGRFeature(poDefnResult));
         if (mapMethod)
             z->SetFieldsFrom(y.get(), mapMethod);
-        z->SetGeometryDirectly(y_geom);
+        z->SetGeometryDirectly(y_geom.release());
         ret = pLayerResult->CreateFeature(z.get());
         if (ret != OGRERR_NONE)
         {
