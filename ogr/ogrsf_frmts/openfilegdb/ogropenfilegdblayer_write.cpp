@@ -2319,8 +2319,7 @@ bool OGROpenFileGDBLayer::PrepareFileGDBFeature(OGRFeature *poFeature,
                         CPLError(
                             CE_Warning, CPLE_AppDefined,
                             "Attempt at writing a datetime with an unknown "
-                            "time "
-                            "zone "
+                            "time zone "
                             "or local time in a layer that expects dates "
                             "to be convertible to UTC. It will be written as "
                             "if it was expressed in UTC.");
