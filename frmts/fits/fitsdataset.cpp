@@ -1906,7 +1906,7 @@ FITSDataset::~FITSDataset()
                         // types, the GDAL Metadata mechanism works only with
                         // string values. Prior to about 2003-05-02, this driver
                         // would attempt to guess the value type from the
-                        // metadata value string amd then would use the
+                        // metadata value string and then would use the
                         // appropriate type-specific FITS keyword update
                         // routine. This was found to be troublesome (e.g. a
                         // numeric version string with leading zeros would be

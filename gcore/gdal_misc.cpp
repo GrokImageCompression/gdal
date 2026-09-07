@@ -3830,7 +3830,7 @@ int CPL_STDCALL GDALGeneralCmdLineProcessor(int nArgc, char ***ppapszArgv,
     /* ==================================================================== */
 
     // Start with --debug, so that "my_command --config UNKNOWN_CONFIG_OPTION --debug on"
-    // detects and warns about a unknown config option.
+    // detects and warns about an unknown config option.
     for (iArg = 1; iArg < nArgc; iArg++)
     {
         if (EQUAL(papszArgv[iArg], "--config") && iArg + 2 < nArgc &&

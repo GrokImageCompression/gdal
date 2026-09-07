@@ -936,7 +936,7 @@ def test_gdalalg_pipeline_nested_errors():
         )
 
     with pytest.raises(
-        Exception, match="'not_existing' is a unknown sub-algorithm of 'overview'"
+        Exception, match="'not_existing' is an unknown sub-algorithm of 'overview'"
     ):
         gdal.Run(
             "pipeline",
