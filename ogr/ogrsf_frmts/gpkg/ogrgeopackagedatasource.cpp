@@ -531,7 +531,7 @@ int GDALGeoPackageDataset::GetSrsId(const OGRSpatialReference *poSRSIn)
         if (err == OGRERR_NONE)
             return nSRSId;
 
-        // The below WKT definitions are somehow questionable (using a unknown
+        // The below WKT definitions are somehow questionable (using an unknown
         // unit). For GDAL >= 3.9, they won't be used. They will only be used
         // for earlier versions.
         const char *pszSQL;

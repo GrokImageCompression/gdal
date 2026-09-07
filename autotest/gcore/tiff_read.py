@@ -4690,7 +4690,7 @@ def test_tiff_read_unhandled_codec_known_name():
 
 
 ###############################################################################
-# Test reading a file with a unhandled codec of a unknown name
+# Test reading a file with a unhandled codec of an unknown name
 
 
 def test_tiff_read_unhandled_codec_unknown_name():
