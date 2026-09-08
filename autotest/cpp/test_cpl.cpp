@@ -694,6 +694,15 @@ TEST_F(test_cpl, CPLStringList_Base)
     ASSERT_TRUE(EQUAL(oCopy[2], "xyz"));
 }
 
+TEST_F(test_cpl, CPLStringList_AddDouble)
+{
+    CPLStringList oCSL;
+    oCSL.AddString(M_PI);
+
+    const double dfPi = CPLStrtod(oCSL[0], nullptr);
+    ASSERT_EQ(dfPi, M_PI);
+}
+
 // Test CSLRemoveStrings() with the special values of nFirstLineToDelete
 // documented as meaning "remove the nNumToRemove last strings".
 TEST_F(test_cpl, CSLRemoveStrings_last_strings)
