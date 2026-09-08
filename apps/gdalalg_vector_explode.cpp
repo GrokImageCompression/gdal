@@ -539,6 +539,7 @@ bool GDALVectorExplodeAlgorithm::RunStep(GDALPipelineStepRunContext &)
                 *poSrcLayer,
                 std::make_unique<GDALVectorPipelinePassthroughLayer>(
                     *poSrcLayer));
+            continue;
         }
 
         const auto *poLayerDefn = poSrcLayer->GetLayerDefn();
