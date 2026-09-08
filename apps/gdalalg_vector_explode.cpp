@@ -455,11 +455,11 @@ class GDALVectorExplodeLayer final : public GDALVectorPipelineOutputLayer
                         poSrcGeom.reset(
                             poSrcFeature->StealGeometry(iGeomField));
                     }
-                    else
+                    else if (const OGRGeometry *poFirstGeom =
+                                 apoOutFeatures.front()->GetGeomFieldRef(
+                                     iGeomField))
                     {
-                        poSrcGeom.reset(apoOutFeatures.front()
-                                            ->GetGeomFieldRef(iGeomField)
-                                            ->clone());
+                        poSrcGeom.reset(poFirstGeom->clone());
                     }
 
                     poDstFeature->SetGeomField(iGeomField,
