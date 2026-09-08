@@ -539,6 +539,8 @@ def test_gdalalg_vector_explode_active_layer(alg):
 
     out_ds = alg["output"].GetDataset()
 
+    assert out_ds.GetLayerCount() == 2
+
     out_lyr = out_ds.GetLayer(0)
     assert out_lyr.GetLayerDefn().GetGeomFieldDefn(0).GetType() == ogr.wkbPoint
 
