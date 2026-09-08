@@ -61,10 +61,11 @@ Program-Specific Options
 
 .. option:: --output-nodata <NODATA>
 
-    Nodata value for the output raster. If not specified, the NoData value of the input band will be used.
-    If the output band does not have a NoData value, then the value 65535 will be used for floating point
-    output types and the maximum value that can be stored will be used for the integer output types.
+    NoData value for the output raster. If not specified, the value NaN will be used for floating point
+    output types and the maximum value that can be stored will be used for integer output types.
 
+    Due to an implementation detail of the proximity algorithm, the NoData value must be 
+    representable as a 32-bit floating point number.
 
 .. option:: --target-values <TARGET-VALUES>
 
@@ -98,15 +99,13 @@ Examples
 --------
 
 .. example::
-
    :title: Proximity map of a raster with max distance of 3 pixels
 
     .. code-block:: bash
 
-        $ gdal raster proximity --max-distance 3  input.tif output.tif
+        gdal raster proximity --max-distance 3 input.tif output.tif
 
 .. example::
-
    :title: Proximity map of a two bands raster with different target values for each band using a pipeline stack
 
     .. code-block:: bash

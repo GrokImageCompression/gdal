@@ -11,6 +11,8 @@
 # SPDX-License-Identifier: MIT
 ###############################################################################
 
+import math
+
 import gdaltest
 import pytest
 
@@ -172,7 +174,11 @@ def create_gtiff_from_array(
                 "fixed-value": 128,
             },
             np.array(
-                [[65535, 65535, 128], [65535, 128, 128], [128, 128, 0]],
+                [
+                    [float("nan"), float("nan"), 128],
+                    [float("nan"), 128, 128],
+                    [128, 128, 0],
+                ],
                 dtype=np.float32,
             ),
         ),
@@ -221,6 +227,8 @@ def test_gdalalg_raster_proximity_options(tmp_vsimem, options, expected_output_d
     for k, v in options.items():
         alg[k] = v
 
+    set_nodata = alg["nodata"] if alg.GetArg("nodata").IsExplicitlySet() else None
+
     assert alg.Run()
     assert alg.Finalize()
 
@@ -232,9 +240,31 @@ def test_gdalalg_raster_proximity_options(tmp_vsimem, options, expected_output_d
     out_ds = gdal.Open(str(dst_filename_file))
     band_out = out_ds.GetRasterBand(1)
     assert band_out.DataType == data_type
+
+    if set_nodata is not None:
+        assert band_out.GetNoDataValue() == set_nodata
+    elif band_out.DataType == gdal.GDT_UInt8:
+        assert band_out.GetNoDataValue() == 255
+    elif band_out.DataType == gdal.GDT_Int8:
+        assert band_out.GetNoDataValue() == 127
+    elif band_out.DataType == gdal.GDT_Int16:
+        assert band_out.GetNoDataValue() == 2**15 - 1
+    elif band_out.DataType == gdal.GDT_UInt16:
+        assert band_out.GetNoDataValue() == 2**16 - 1
+    elif band_out.DataType == gdal.GDT_Int32:
+        assert band_out.GetNoDataValue() == 2**31 - 1
+    elif band_out.DataType == gdal.GDT_UInt32:
+        assert band_out.GetNoDataValue() == 2**32 - 1
+    elif band_out.DataType in (gdal.GDT_Float32, gdal.GDT_Float64):
+        assert math.isnan(band_out.GetNoDataValue())
+    else:
+        pytest.fail("Unhandled default NoData value")
+
     assert out_ds is not None
     output_data_file = out_ds.GetRasterBand(1).ReadAsArray()
-    assert np.allclose(output_data_file, expected_output_data, atol=1e-6)
+    assert np.allclose(
+        output_data_file, expected_output_data, atol=1e-6, equal_nan=True
+    )
     assert out_ds.GetGeoTransform() == src_ds_opened.GetGeoTransform()
     assert out_ds.GetProjection() == src_ds_opened.GetProjection()
     if (
@@ -284,6 +314,94 @@ def test_gdalalg_raster_proximity_overwrite(tmp_vsimem):
     alg3["overwrite"] = True
     assert alg3.Run()
     assert alg3.Finalize()
+
+
+@pytest.mark.parametrize(
+    "dt",
+    (
+        gdal.GDT_Int8,
+        gdal.GDT_UInt8,
+        gdal.GDT_Int16,
+        gdal.GDT_UInt16,
+        gdal.GDT_Int32,
+        gdal.GDT_UInt32,
+        gdal.GDT_Int64,
+        gdal.GDT_Float16,
+        gdal.GDT_Float32,
+        gdal.GDT_Float64,
+    ),
+    ids=gdal.GetDataTypeName,
+)
+def test_gdalalg_raster_proximity_default_nodata(dt):
+
+    src_ds = gdal.GetDriverByName("MEM").Create("", 3, 3)
+    src_ds.WriteArray(np.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]))
+
+    alg = get_alg()
+    alg["input"] = src_ds
+    alg["output-format"] = "MEM"
+    alg["output-data-type"] = gdal.GetDataTypeName(dt)
+    alg["max-distance"] = 1
+
+    assert alg.Run()
+
+    dst_ds = alg.Output()
+
+    nodata_px = dst_ds.ReadAsArray()[-1, -1]
+
+    expected_nodata = {
+        gdal.GDT_Int8: 127,
+        gdal.GDT_UInt8: 255,
+        gdal.GDT_Int16: 2**15 - 1,
+        gdal.GDT_UInt16: 2**16 - 1,
+        gdal.GDT_Int32: 2**31 - 1,
+        gdal.GDT_UInt32: 2**32 - 1,
+        gdal.GDT_Int64: 2**63 - 1,
+        gdal.GDT_UInt64: 2**64 - 1,
+        gdal.GDT_Float16: float("nan"),
+        gdal.GDT_Float32: float("nan"),
+        gdal.GDT_Float64: float("nan"),
+    }
+
+    if math.isnan(expected_nodata[dt]):
+        assert math.isnan(nodata_px)
+        assert math.isnan(dst_ds.GetRasterBand(1).GetNoDataValue())
+    else:
+        assert nodata_px == expected_nodata[dt]
+        assert dst_ds.GetRasterBand(1).GetNoDataValue() == expected_nodata[dt]
+
+
+@pytest.mark.parametrize(
+    "dt,nodata", ((gdal.GDT_Float64, 1e39), (gdal.GDT_Int32, 2**31 - 2))
+)
+def test_gdalalg_raster_proximity_nodata_not_representable_as_float32(dt, nodata):
+
+    src_ds = gdal.GetDriverByName("MEM").Create("", 3, 3)
+    src_ds.WriteArray(np.array([[1, 0, 0], [0, 0, 0], [0, 0, 0]]))
+
+    alg = get_alg()
+    alg["input"] = src_ds
+    alg["output-format"] = "MEM"
+    alg["output-nodata"] = nodata
+    alg["output-data-type"] = gdal.GetDataTypeName(dt)
+    alg["max-distance"] = 1
+
+    with pytest.raises(Exception, match="representable as a 32-bit float"):
+        assert alg.Run()
+
+
+@pytest.mark.parametrize(
+    "dt", (gdal.GDT_CFloat32, gdal.GDT_CFloat64), ids=gdal.GetDataTypeName
+)
+def test_gdalalg_raster_proximity_invalid_output_type(dt):
+
+    alg = get_alg()
+    alg["input"] = "../gcore/data/byte.tif"
+    alg["output-format"] = "MEM"
+    alg["output-data-type"] = gdal.GetDataTypeName(dt)
+
+    with pytest.raises(Exception, match="Complex output types not supported"):
+        assert alg.Run()
 
 
 @pytest.mark.require_driver("GTiff")

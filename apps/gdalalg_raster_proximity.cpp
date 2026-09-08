@@ -12,6 +12,9 @@
 
 #include "gdalalg_raster_proximity.h"
 
+#include <cmath>
+#include <limits>
+
 #include "cpl_conv.h"
 
 #include "gdal_alg.h"
@@ -76,6 +79,13 @@ bool GDALRasterProximityAlgorithm::RunStep(GDALPipelineStepRunContext &ctxt)
         outputType = GDALGetDataTypeByName(m_outputDataType.c_str());
     }
 
+    if (GDALDataTypeIsComplex(outputType))
+    {
+        CPLError(CE_Failure, CPLE_AppDefined,
+                 "Complex output types not supported");
+        return false;
+    }
+
     auto poTmpDS = CreateTemporaryDataset(
         poSrcDS->GetRasterXSize(), poSrcDS->GetRasterYSize(), 1, outputType,
         /* bTiledIfPossible = */ true, poSrcDS, /* bCopyMetadata = */ false);
@@ -110,8 +120,50 @@ bool GDALRasterProximityAlgorithm::RunStep(GDALPipelineStepRunContext &ctxt)
 
     if (GetArg("output-nodata")->IsExplicitlySet())
     {
-        proximityOptions.AddString(CPLSPrintf("NODATA=%.17g", m_noDataValue));
+        // Because GDALComputeProximity does all of its work with 32-bit floats,
+        // we need to check that a manually-specified NoData value can be represented
+        // as a 32-bit float. The default NoData value for some integer types
+        // also cannot be represented as 32-bit floats, but they still round-trip OK,
+        // so we only perform the runtime check for manually-specified values.
+        if (!std::isnan(m_noDataValue))
+        {
+            const float fNoData = static_cast<float>(m_noDataValue);
+            if (static_cast<double>(fNoData) != m_noDataValue)
+            {
+                CPLError(CE_Failure, CPLE_AppDefined,
+                         "gdal raster proximity requires the output NoData "
+                         "value to be representable as a 32-bit floating point "
+                         "number, but the specified value of %g cannot.",
+                         m_noDataValue);
+                return false;
+            }
+        }
         dstBand->SetNoDataValue(m_noDataValue);
+    }
+    else if (outputType == GDT_Float16 || outputType == GDT_Float32 ||
+             outputType == GDT_Float64)
+    {
+        dstBand->SetNoDataValue(std::numeric_limits<double>::quiet_NaN());
+    }
+    else if (outputType == GDT_Int64)
+    {
+        constexpr auto nMax = std::numeric_limits<int64_t>::max();
+        dstBand->SetNoDataValueAsInt64(nMax);
+    }
+    else
+    {
+        double dfNoData;
+        if (GDALGetDataTypeMinMaxAsDouble(outputType, nullptr, &dfNoData))
+        {
+            dstBand->SetNoDataValue(dfNoData);
+        }
+        else
+        {
+            CPLError(CE_Failure, CPLE_AppDefined,
+                     "No default NoData value for output data type %s",
+                     GDALGetDataTypeName(outputType));
+            return false;
+        }
     }
 
     // Always set this to YES. Note that this was NOT the
