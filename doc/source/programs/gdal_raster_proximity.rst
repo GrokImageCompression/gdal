@@ -22,7 +22,7 @@ Synopsis
 Description
 -----------
 
-:program:`gdal raster proximity` generates a raster proximity map indicating the Cartesian distance from
+:program:`gdal raster proximity` generates a raster proximity map indicating approximate Cartesian distance from
 the center of each pixel to the center of the nearest pixel identified as a target pixel.
 Target pixels are those in the source raster for which the raster pixel value is in the set of
 target pixel values.
@@ -105,8 +105,20 @@ Examples
 
         gdal raster proximity --max-distance 3 input.tif output.tif
 
+    Pixels exceeding the specified maximum distance of 3 are marked as NoData.
+    Because :option:`--target-values` was not specified, all nonzero pixels are
+    considered targets.
+    Note the pixel in the 4th row and 4th column whose value is 3 rather than
+    the exact distance of 2.83; this is a consequence of the approximation
+    algorithm used by :program:`gdal raster proximity`.
+
+    .. image:: ../../images/programs/gdal_raster_proximity_1.svg
+        :width: 800px
+        :alt: Plot of command inputs and outputs
+
+
 .. example::
-   :title: Proximity map of a two bands raster with different target values for each band using a pipeline stack
+   :title: Proximity map of a two-band raster with different target values for each band using a pipeline stack
 
     .. code-block:: bash
 
