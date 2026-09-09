@@ -325,8 +325,6 @@ def test_gdalalg_raster_proximity_overwrite(tmp_vsimem):
         gdal.GDT_UInt16,
         gdal.GDT_Int32,
         gdal.GDT_UInt32,
-        gdal.GDT_Int64,
-        gdal.GDT_Float16,
         gdal.GDT_Float32,
         gdal.GDT_Float64,
     ),
@@ -391,17 +389,22 @@ def test_gdalalg_raster_proximity_nodata_not_representable_as_float32(dt, nodata
 
 
 @pytest.mark.parametrize(
-    "dt", (gdal.GDT_CFloat32, gdal.GDT_CFloat64), ids=gdal.GetDataTypeName
+    "dt",
+    (
+        gdal.GDT_Float16,
+        gdal.GDT_Int64,
+        gdal.GDT_UInt64,
+        gdal.GDT_CFloat32,
+        gdal.GDT_CFloat64,
+    ),
+    ids=gdal.GetDataTypeName,
 )
 def test_gdalalg_raster_proximity_invalid_output_type(dt):
 
     alg = get_alg()
-    alg["input"] = "../gcore/data/byte.tif"
-    alg["output-format"] = "MEM"
-    alg["output-data-type"] = gdal.GetDataTypeName(dt)
 
-    with pytest.raises(Exception, match="Complex output types not supported"):
-        assert alg.Run()
+    with pytest.raises(Exception, match="Invalid value .* for .* 'output-data-type"):
+        alg["output-data-type"] = gdal.GetDataTypeName(dt)
 
 
 @pytest.mark.require_driver("GTiff")

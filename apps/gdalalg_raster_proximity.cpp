@@ -35,8 +35,9 @@ GDALRasterProximityAlgorithm::GDALRasterProximityAlgorithm(bool standaloneStep)
                                                       HELP_URL, standaloneStep)
 {
     AddOutputDataTypeArg(&m_outputDataType)
-        .SetChoices("Byte", "UInt16", "Int16", "UInt32", "Int32", "Float32",
+        .SetChoices("Int8", "UInt16", "Int16", "UInt32", "Int32", "Float32",
                     "Float64")
+        .SetHiddenChoices("Byte")
         .SetDefault(m_outputDataType);
     AddBandArg(&m_inputBand);
     AddArg("target-values", 0, _("Target pixel values"), &m_targetPixelValues);
@@ -77,13 +78,6 @@ bool GDALRasterProximityAlgorithm::RunStep(GDALPipelineStepRunContext &ctxt)
     if (!m_outputDataType.empty())
     {
         outputType = GDALGetDataTypeByName(m_outputDataType.c_str());
-    }
-
-    if (GDALDataTypeIsComplex(outputType))
-    {
-        CPLError(CE_Failure, CPLE_AppDefined,
-                 "Complex output types not supported");
-        return false;
     }
 
     auto poTmpDS = CreateTemporaryDataset(
@@ -144,11 +138,6 @@ bool GDALRasterProximityAlgorithm::RunStep(GDALPipelineStepRunContext &ctxt)
              outputType == GDT_Float64)
     {
         dstBand->SetNoDataValue(std::numeric_limits<double>::quiet_NaN());
-    }
-    else if (outputType == GDT_Int64)
-    {
-        constexpr auto nMax = std::numeric_limits<int64_t>::max();
-        dstBand->SetNoDataValueAsInt64(nMax);
     }
     else
     {
